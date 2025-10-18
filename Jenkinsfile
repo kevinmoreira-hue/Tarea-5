@@ -104,7 +104,7 @@ pipeline {
           set +e  # Don't fail immediately on error
           echo "=== Running JMeter tests with 5-minute timeout ==="
           timeout 300 docker exec ${JMETER_CONTAINER_NAME} jmeter -n \
-            -t /work/Tarea semana 3 Kevin Moreira.jmx \
+            -t /work/jmeter/Tarea semana 3 Kevin Moreira.jmx \
             -l /work/out/results.jtl \
             -e -o /work/out/jmeter-report \
             -f \
@@ -278,29 +278,6 @@ EOF
       }
     }
 
-    stage('Collect Prometheus Metrics') {
-      steps {
-        script {
-          try {
-            sh """
-              echo "=== Collecting Current Prometheus Metrics ==="
-              # Wait a moment for metrics to be processed
-              sleep 5
-
-              # Collect current metrics from Prometheus
-              curl -s "http://prometheus:9090/api/v1/query?query=http_request_duration_ms_count" | jq . > ${OUT_DIR}/prometheus_metrics.json || echo "Could not collect Prometheus metrics"
-
-              # Generate metrics summary
-              curl -s "http://prometheus:9090/api/v1/query?query=rate(http_request_duration_ms_count[5m])" | jq . > ${OUT_DIR}/prometheus_rates.json || echo "Could not collect rate metrics"
-
-              echo "Prometheus metrics collected"
-            """
-          } catch (Exception e) {
-            echo "Warning: Could not collect Prometheus metrics: ${e.message}"
-          }
-        }
-      }
-    }
 
     stage('Archive Results') {
       steps {
