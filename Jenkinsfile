@@ -215,6 +215,83 @@ pipeline {
         }
       }
     }
+
+    stage('Performance Analysis') {
+      steps {
+        script {
+          if (fileExists("${OUT_DIR}/results.jtl")) {
+            echo "📊 Iniciando análisis automatizado de rendimiento con umbrales dinámicos (P95 < 500 ms, tasa de error < 1%)"
+
+            // Leer métricas base
+            def results = sh(script: "tail -n +2 ${OUT_DIR}/results.jtl | wc -l", returnStdout: true).trim().toInteger()
+            def errors = sh(script: "tail -n +2 ${OUT_DIR}/results.jtl | awk -F',' '\$8==\"false\"' | wc -l", returnStdout: true).trim().toInteger()
+            def successRate = ((results - errors) * 100) / results
+
+            // Calcular tiempos de respuesta
+            def avgResponse = sh(script: "tail -n +2 ${OUT_DIR}/results.jtl | awk -F',' '{sum+=\$2; count++} END {if(count>0) print int(sum/count); else print 0}'", returnStdout: true).trim().toInteger()
+            def maxResponse = sh(script: "tail -n +2 ${OUT_DIR}/results.jtl | awk -F',' '{if(\$2>max) max=\$2} END {print int(max)}'", returnStdout: true).trim().toInteger()
+
+            // 🔹 Calcular percentil 95 (P95)
+            def p95Response = sh(script: """
+              tail -n +2 ${OUT_DIR}/results.jtl | awk -F',' '{print \$2}' | sort -n | awk '{
+                arr[NR]=\$1
+              }
+              END {
+                idx=int(NR*0.95)
+                if (idx<1) idx=1
+                print arr[idx]
+              }'
+            """, returnStdout: true).trim().toInteger()
+
+            echo "📊 Performance Test Results:"
+            echo "   Total Requests: ${results}"
+            echo "   Errors: ${errors}"
+            def successRateRounded = ((successRate * 10) as int) / 10.0
+            echo "   Success Rate: ${successRateRounded}%"
+            echo "   Average Response Time: ${avgResponse} ms"
+            echo "   P95 Response Time: ${p95Response} ms"
+            echo "   Max Response Time: ${maxResponse} ms"
+
+            // 🔍 Evaluar umbrales automáticos (error < 1%, P95 < 500ms)
+            def errorRate = 100 - successRate
+            def performanceIssues = []
+
+            if (errorRate > 1) {
+              performanceIssues.add("⚠️ Error rate above 1% (${String.format('%.2f', errorRate)}%)")
+            }
+
+            if (p95Response > 500) {
+              performanceIssues.add("⚠️ P95 response time above 500 ms (${p95Response} ms)")
+            }
+
+            if (performanceIssues.size() > 0) {
+              echo "🚨 Performance Issues Detected:"
+              performanceIssues.each { issue ->
+                echo "   ${issue}"
+              }
+            }
+
+            // 🔧 Determinar resultado del build según umbrales
+            if (errorRate <= 1 && p95Response <= 500) {
+              currentBuild.result = 'SUCCESS'
+              echo "✅ Performance test PASSED - All automated thresholds met"
+            } else if (errorRate <= 3 && p95Response <= 800) {
+              currentBuild.result = 'UNSTABLE'
+              echo "⚠️ Performance test UNSTABLE - Slightly above thresholds"
+            } else {
+              currentBuild.result = 'FAILURE'
+              echo "❌ Performance test FAILED - Thresholds violated"
+            }
+
+            // 📘 Descripción del build
+            currentBuild.description = "Success: ${successRateRounded}% | Error: ${String.format('%.2f', errorRate)}% | P95: ${p95Response}ms | Avg: ${avgResponse}ms | Max: ${maxResponse}ms | Req: ${results}"
+
+            echo "📈 Umbrales aplicados: P95 < 500ms, Error rate < 1%"
+            echo "📊 Revisión disponible en Performance Trend y reportes HTML"
+          }
+        }
+      }
+    }
   }
 
   post {
