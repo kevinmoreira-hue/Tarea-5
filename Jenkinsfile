@@ -22,6 +22,7 @@ pipeline {
   }
 
   environment {
+
     DOCKER_NETWORK = 'jenkins_net'
     OUT_DIR = 'out'
     REPORTS_DIR = 'reports'
@@ -42,22 +43,6 @@ pipeline {
       steps {
         sh """
           docker build -t ${JMETER_IMAGE} ./jmeter
-        """
-      }
-    }
-
-    stage('Wait for AUT') {
-      steps {
-        sh """
-          echo "Waiting for Application Under Test to be ready..."
-          for i in {1..90}; do
-            if curl -fsS http://${AUT_HOST}:${AUT_PORT}/health >/dev/null 2>&1; then
-              echo 'AUT is ready'; exit 0
-            fi
-            echo "Attempt \$i/90: AUT not ready, waiting..."
-            sleep 2
-          done
-          echo 'AUT not healthy after 3 minutes'; exit 1
         """
       }
     }
