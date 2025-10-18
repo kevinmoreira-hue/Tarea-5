@@ -22,8 +22,6 @@ pipeline {
   }
 
   environment {
-    AUT_HOST = 'application'
-    AUT_PORT = '3000'
     DOCKER_NETWORK = 'jenkins_net'
     OUT_DIR = 'out'
     REPORTS_DIR = 'reports'
